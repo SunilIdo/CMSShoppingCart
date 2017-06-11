@@ -1,6 +1,7 @@
 ﻿using CmsShoppingCart.Models.Data;
 using CmsShoppingCart.Models.ViewModels.Account;
 using CmsShoppingCart.Models.ViewModels.Cart;
+using CmsShoppingCart.Models.ViewModels.Shop;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -136,13 +137,14 @@ namespace CmsShoppingCart.Controllers
 
         //GET: /account/Logout
         [HttpGet]
+        [Authorize]
         public ActionResult Logout()
         {
             FormsAuthentication.SignOut();
             return Redirect("~/account/login");
         }
 
-
+        [Authorize]
         public ActionResult UserNavPartial()
         {
             //Get the username
@@ -169,6 +171,7 @@ namespace CmsShoppingCart.Controllers
 
         //GET: /account/user-profile
         [HttpGet]
+        [Authorize]
         [ActionName("user-profile")]
         public ActionResult UserProfile()
         {
@@ -244,6 +247,61 @@ namespace CmsShoppingCart.Controllers
             TempData["SM"] = "You have edited your profile!";
 
             return Redirect("~/account/user-profile");
-        }       
+        }
+
+        //GET: /account/Orders
+        [Authorize(Roles="User")]
+        public ActionResult Orders()
+        {
+            //Init list of OrdersForUserVM
+            List<OrdersForUserVM> orderForUser = new List<OrdersForUserVM>();
+            using (Db db=new Db())
+            {
+                //Get user id
+                UserDTO user = db.Users.Where(x => x.Username == User.Identity.Name).FirstOrDefault();
+                int userId = user.Id;
+                //Init list of OrderVM
+                List<OrderVM> orders = db.Orders.Where(x => x.UserId == userId).ToArray().Select(x => new OrderVM(x)).ToList();
+                //loop through list of orderVM
+                foreach (var order in orders)
+                {
+                    //Init product dict
+                    Dictionary<string, int> productsAndQty = new Dictionary<string, int>();
+                    //Declare total
+                    decimal total=0m;
+
+                    //Init list of orderDetailsDTO
+                    List<OrderDetailsDTO> orderDetailsDTO = db.OrderDetails.Where(x => x.OrderId == order.OrderId).ToList();
+
+                    //loop through list of orderDetailsDTO
+                    foreach (var orderDetails in orderDetailsDTO)
+                    {
+                        //Get product
+                        ProductDTO product = db.Products.Where(x => x.Id == orderDetails.ProductId).FirstOrDefault();
+
+                        //Get product price
+                        decimal price=product.Price;
+
+                        //Get product name
+                        string productName = product.Name;
+
+                        //Add to products dict
+                        productsAndQty.Add(productName, orderDetails.Quantity);
+
+                        //Get total
+                        total += orderDetails.Quantity * price;                       
+                    }
+                    //Add to OrdersForUserVM list
+                    orderForUser.Add(new OrdersForUserVM()
+                    {
+                        OrderNumber = order.OrderId,
+                        Total = total,
+                        ProductsAndQty = productsAndQty,
+                        CreatedAt = order.CreatedAt
+                    });
+                }
+            }
+            return View(orderForUser);
+        }
     }
 }
